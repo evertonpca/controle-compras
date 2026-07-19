@@ -21,7 +21,8 @@ describe('validateProduct', () => {
         preco: 199.9,
         estoque: 5,
         ativo: 0,
-        data_compra: '2026-07-19'
+        data_compra: '2026-07-19',
+        purchase_id: ''
       }
     });
   });

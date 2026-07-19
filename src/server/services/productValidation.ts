@@ -10,6 +10,7 @@ export function validateProduct(body: unknown): ValidationResult {
   const estabelecimento = String(data.estabelecimento ?? '').trim();
   const categoria = String(data.categoria ?? '').trim();
   const data_compra = String(data.data_compra ?? '').trim();
+  const purchase_id = String(data.purchase_id ?? '').trim();
   const preco = Number(data.preco);
   const estoque = Number(data.estoque);
   const ativo = data.ativo === false || data.ativo === 0 ? 0 : 1;
@@ -18,5 +19,5 @@ export function validateProduct(body: unknown): ValidationResult {
   if (!Number.isFinite(preco) || preco < 0) return { error: 'Informe um preço válido.' };
   if (!Number.isInteger(estoque) || estoque < 0) return { error: 'Informe um estoque inteiro e não negativo.' };
 
-  return { product: { nome, estabelecimento, categoria, preco, estoque, ativo, data_compra } };
+  return { product: { nome, estabelecimento, categoria, preco, estoque, ativo, data_compra, purchase_id } };
 }

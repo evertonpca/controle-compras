@@ -1,17 +1,35 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Product, ProductInput } from '../shared/product.js';
 import { ProductDialog } from './components/ProductDialog.js';
+import { PurchaseDialog } from './components/PurchaseDialog.js';
+import { ReceiptScannerDialog } from './components/ReceiptScannerDialog.js';
 import { createProduct, deleteProduct, listProducts, updateProduct } from './services/productsApi.js';
 
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const dateFormatter = new Intl.DateTimeFormat('pt-BR');
-const primaryButtonClass = 'rounded-lg bg-[#176b45] px-4 py-3 font-bold text-white transition hover:bg-[#0e5033] disabled:cursor-wait disabled:opacity-70';
-const actionButtonClass = 'rounded-lg bg-transparent px-2 py-1.5 font-bold text-[#176b45] transition hover:bg-[#e4f4eb]';
-const tableHeaderClass = 'border-b border-[#edf1ee] px-5 py-4 text-left text-[11px] uppercase tracking-[1px] text-[#68756e]';
-const tableCellClass = 'whitespace-nowrap border-b border-[#edf1ee] px-5 py-4 text-sm';
+const monthFormatter = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' });
+const primaryButtonClass = 'min-h-11 cursor-pointer rounded-lg bg-[#176b45] px-4 py-3 font-bold text-white shadow-[0_10px_22px_rgba(23,107,69,.18)] transition hover:bg-[#0e5033] active:translate-y-px disabled:cursor-wait disabled:opacity-70';
+const secondaryButtonClass = 'min-h-11 cursor-pointer rounded-lg border border-[#d3ded8] bg-[#f8faf8] px-4 py-3 font-bold text-[#17231d] transition hover:border-[#b7c9be] hover:bg-white active:translate-y-px';
+const actionButtonClass = 'cursor-pointer rounded-lg bg-transparent px-2 py-1.5 font-bold text-[#176b45] transition hover:bg-[#e4f4eb] active:translate-y-px';
+const cardClass = 'rounded-lg border border-[#dfe6e1] bg-[#fffdf8] shadow-[0_10px_28px_rgba(25,50,38,.06)]';
+const inputClass = 'w-full rounded-lg border border-[#cbd6cf] bg-white px-3 py-3 text-[#17231d] outline-none transition placeholder:text-[#8a958e] focus:border-[#176b45] focus:shadow-[0_0_0_3px_rgba(23,107,69,.12)]';
+const dateInputClass = `${inputClass} cursor-pointer`;
+const selectClass = `${inputClass} cursor-pointer`;
+
+interface PurchaseGroup {
+  id: string;
+  estabelecimento: string;
+  data_compra: string;
+  items: Product[];
+  total: number;
+  quantity: number;
+  categories: string[];
+}
 
 function todayIsoDate() {
-  return new Date().toISOString().slice(0, 10);
+  const today = new Date();
+  const timezoneOffset = today.getTimezoneOffset() * 60_000;
+  return new Date(today.getTime() - timezoneOffset).toISOString().slice(0, 10);
 }
 
 function formatPurchaseDate(value: string) {
@@ -20,24 +38,165 @@ function formatPurchaseDate(value: string) {
   return dateFormatter.format(new Date(year, month - 1, day));
 }
 
+function productTotal(product: Product) {
+  return product.preco * Math.max(1, product.estoque);
+}
+
+function getProductDate(product: Product) {
+  return product.data_compra || product.criado_em.slice(0, 10) || todayIsoDate();
+}
+
+function getCurrentRoute() {
+  return window.location.pathname === '/compras' ? 'compras' : 'dashboard';
+}
+
+function buildBreakdown(products: Product[], field: 'estabelecimento' | 'categoria') {
+  const totals = new Map<string, number>();
+
+  for (const product of products) {
+    const key = product[field] || (field === 'categoria' ? 'Sem categoria' : 'Sem estabelecimento');
+    totals.set(key, (totals.get(key) ?? 0) + productTotal(product));
+  }
+
+  return Array.from(totals, ([label, total]) => ({ label, total }))
+    .sort((left, right) => right.total - left.total);
+}
+
+function groupPurchases(products: Product[]): PurchaseGroup[] {
+  const groups = new Map<string, PurchaseGroup>();
+
+  for (const product of products) {
+    const date = getProductDate(product);
+    const merchant = product.estabelecimento || 'Sem estabelecimento';
+    const id = product.purchase_id || `legacy-product-${product.id}`;
+    const group = groups.get(id) ?? {
+      id,
+      estabelecimento: merchant,
+      data_compra: date,
+      items: [],
+      total: 0,
+      quantity: 0,
+      categories: []
+    };
+
+    group.items.push(product);
+    group.total += productTotal(product);
+    group.quantity += Math.max(1, product.estoque);
+    group.categories = Array.from(new Set([...group.categories, product.categoria || 'Sem categoria']));
+    groups.set(id, group);
+  }
+
+  return Array.from(groups.values()).sort((left, right) => right.data_compra.localeCompare(left.data_compra));
+}
+
+function BreakdownList({ title, items }: { title: string; items: Array<{ label: string; total: number }> }) {
+  const maxTotal = Math.max(...items.map((item) => item.total), 1);
+  const shownItems = items.slice(0, 6);
+
+  return (
+    <section className="rounded-lg border border-[#dce4df] bg-[#fffdf8] p-4 shadow-[0_10px_28px_rgba(25,50,38,.06)] sm:p-5">
+      <h2 className="text-base font-bold sm:text-lg">{title}</h2>
+      <div className="mt-5 grid gap-4">
+        {shownItems.map((item) => (
+          <div key={item.label} className="grid gap-2 rounded-lg bg-white/70 p-3">
+            <div className="flex items-center justify-between gap-4 text-sm">
+              <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-bold">{item.label}</span>
+              <span className="shrink-0 text-[#68756e]">{currency.format(item.total)}</span>
+            </div>
+            <div className="h-2 rounded-full bg-[#e4ece7]">
+              <div className="h-full rounded-full bg-[#176b45]" style={{ width: `${Math.max(7, (item.total / maxTotal) * 100)}%` }} />
+            </div>
+          </div>
+        ))}
+        {!shownItems.length && <p className="py-8 text-center text-sm text-[#68756e]">Sem dados para exibir.</p>}
+      </div>
+    </section>
+  );
+}
+
 export function App() {
   const [products, setProducts] = useState<Product[]>([]);
   const [search, setSearch] = useState('');
+  const [route, setRoute] = useState<'dashboard' | 'compras'>(() => getCurrentRoute());
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isProductDialogOpen, setIsProductDialogOpen] = useState(false);
+  const [isPurchaseDialogOpen, setIsPurchaseDialogOpen] = useState(false);
+  const [isReceiptScannerOpen, setIsReceiptScannerOpen] = useState(false);
+  const [selectedPurchaseId, setSelectedPurchaseId] = useState<string | null>(null);
+  const [dateStart, setDateStart] = useState('');
+  const [dateEnd, setDateEnd] = useState('');
+  const [merchantFilter, setMerchantFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [minTotal, setMinTotal] = useState('');
+  const [maxTotal, setMaxTotal] = useState('');
   const [formError, setFormError] = useState('');
   const [toast, setToast] = useState('');
   const [loadError, setLoadError] = useState('');
 
-  const emptyMessage = useMemo(() => loadError || 'Nenhum produto encontrado.', [loadError]);
+  const emptyMessage = useMemo(() => loadError || 'Nenhuma compra encontrada.', [loadError]);
+  const currentMonth = todayIsoDate().slice(0, 7);
+  const monthProducts = useMemo(
+    () => products.filter((product) => getProductDate(product).slice(0, 7) === currentMonth),
+    [products, currentMonth]
+  );
+  const monthlyTotal = useMemo(() => monthProducts.reduce((total, product) => total + productTotal(product), 0), [monthProducts]);
+  const merchantBreakdown = useMemo(() => buildBreakdown(monthProducts, 'estabelecimento'), [monthProducts]);
+  const categoryBreakdown = useMemo(() => buildBreakdown(monthProducts, 'categoria'), [monthProducts]);
+  const purchases = useMemo(() => groupPurchases(products), [products]);
+  const merchantOptions = useMemo(() => (
+    Array.from(new Set(purchases.map((purchase) => purchase.estabelecimento))).sort((left, right) => left.localeCompare(right))
+  ), [purchases]);
+  const categoryOptions = useMemo(() => (
+    Array.from(new Set(purchases.flatMap((purchase) => purchase.categories))).sort((left, right) => left.localeCompare(right))
+  ), [purchases]);
+  const filteredPurchases = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    const minValue = Number(minTotal);
+    const maxValue = Number(maxTotal);
+    const min = minTotal === '' || !Number.isFinite(minValue) ? null : minValue;
+    const max = maxTotal === '' || !Number.isFinite(maxValue) ? null : maxValue;
 
-  async function loadProducts(currentSearch = search) {
+    return purchases.filter((purchase) => (
+      (!term
+        || purchase.estabelecimento.toLowerCase().includes(term)
+        || purchase.categories.some((category) => category.toLowerCase().includes(term))
+        || purchase.items.some((item) => item.nome.toLowerCase().includes(term)))
+      && (!dateStart || purchase.data_compra >= dateStart)
+      && (!dateEnd || purchase.data_compra <= dateEnd)
+      && (!merchantFilter || purchase.estabelecimento === merchantFilter)
+      && (!categoryFilter || purchase.categories.includes(categoryFilter))
+      && (min === null || purchase.total >= min)
+      && (max === null || purchase.total <= max)
+    ));
+  }, [purchases, search, dateStart, dateEnd, merchantFilter, categoryFilter, minTotal, maxTotal]);
+  const selectedPurchase = useMemo(() => (
+    filteredPurchases.find((purchase) => purchase.id === selectedPurchaseId) ?? null
+  ), [filteredPurchases, selectedPurchaseId]);
+  const currentMonthPurchases = useMemo(
+    () => purchases.filter((purchase) => purchase.data_compra.slice(0, 7) === currentMonth),
+    [purchases, currentMonth]
+  );
+  const averageTicket = purchases.length ? purchases.reduce((total, purchase) => total + purchase.total, 0) / purchases.length : 0;
+  const topProduct = useMemo(() => {
+    const totals = new Map<string, { label: string; total: number }>();
+    for (const product of monthProducts) {
+      const current = totals.get(product.nome) ?? { label: product.nome, total: 0 };
+      current.total += productTotal(product);
+      totals.set(product.nome, current);
+    }
+    return Array.from(totals.values()).sort((left, right) => right.total - left.total)[0];
+  }, [monthProducts]);
+
+  async function loadProducts(): Promise<Product[]> {
     try {
       setLoadError('');
-      setProducts(await listProducts(currentSearch));
+      const loadedProducts = await listProducts();
+      setProducts(loadedProducts);
+      return loadedProducts;
     } catch {
       setProducts([]);
-      setLoadError('Não foi possível carregar os produtos.');
+      setLoadError('Nao foi possivel carregar as compras.');
+      return [];
     }
   }
 
@@ -46,15 +205,53 @@ export function App() {
     window.setTimeout(() => setToast(''), 2500);
   }
 
-  function openDialog(product: Product | null = null) {
-    setEditingProduct(product);
-    setFormError('');
-    setIsDialogOpen(true);
+  function navigate(nextRoute: 'dashboard' | 'compras') {
+    const nextPath = nextRoute === 'compras' ? '/compras' : '/';
+    window.history.pushState(null, '', nextPath);
+    setRoute(nextRoute);
+    setSearch('');
   }
 
-  function closeDialog() {
-    setIsDialogOpen(false);
+  function clearPurchaseFilters() {
+    setSearch('');
+    setDateStart('');
+    setDateEnd('');
+    setMerchantFilter('');
+    setCategoryFilter('');
+    setMinTotal('');
+    setMaxTotal('');
+  }
+
+  function openProductDialog(product: Product | null = null) {
+    setEditingProduct(product);
+    setFormError('');
+    setIsProductDialogOpen(true);
+  }
+
+  function closeProductDialog() {
+    setIsProductDialogOpen(false);
     setEditingProduct(null);
+    setFormError('');
+  }
+
+  function openPurchaseDialog() {
+    setFormError('');
+    setIsPurchaseDialogOpen(true);
+  }
+
+  function closePurchaseDialog() {
+    setIsPurchaseDialogOpen(false);
+    setFormError('');
+  }
+
+  function openReceiptScanner() {
+    setFormError('');
+    setIsReceiptScannerOpen(true);
+    navigate('compras');
+  }
+
+  function closeReceiptScanner() {
+    setIsReceiptScannerOpen(false);
     setFormError('');
   }
 
@@ -62,111 +259,347 @@ export function App() {
     try {
       if (editingProduct) {
         await updateProduct(editingProduct.id, input);
-        showToast('Produto atualizado.');
+        showToast('Item atualizado.');
       } else {
         await createProduct(input);
-        showToast('Produto cadastrado.');
+        showToast('Item cadastrado.');
       }
 
-      closeDialog();
+      closeProductDialog();
       await loadProducts();
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : 'Não foi possível salvar o produto.');
+      setFormError(error instanceof Error ? error.message : 'Nao foi possivel salvar o item.');
+    }
+  }
+
+  async function savePurchase(items: ProductInput[]) {
+    try {
+      const purchaseId = crypto.randomUUID();
+      for (const item of items) {
+        await createProduct({ ...item, purchase_id: purchaseId });
+      }
+
+      closePurchaseDialog();
+      showToast('Compra cadastrada.');
+      await loadProducts();
+      setSelectedPurchaseId(purchaseId);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'Nao foi possivel salvar a compra.');
+    }
+  }
+
+  async function importReceiptPurchase(items: ProductInput[]) {
+    try {
+      const purchaseId = crypto.randomUUID();
+      for (const item of items) {
+        await createProduct({ ...item, purchase_id: purchaseId });
+      }
+
+      closeReceiptScanner();
+      showToast('Nota importada como compra.');
+      await loadProducts();
+      setSelectedPurchaseId(purchaseId);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'Nao foi possivel importar a nota fiscal.');
     }
   }
 
   async function removeProduct(product: Product) {
-    if (!window.confirm(`Deseja realmente excluir "${product.nome}"?`)) return;
+    if (!window.confirm(`Deseja realmente excluir "${product.nome}" desta compra?`)) return;
     await deleteProduct(product.id);
-    showToast('Produto excluído.');
+    showToast('Item excluido.');
     await loadProducts();
   }
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void loadProducts(search);
-    }, 250);
+    void loadProducts();
+  }, []);
 
-    return () => window.clearTimeout(timer);
-  }, [search]);
+  useEffect(() => {
+    const handlePopState = () => setRoute(getCurrentRoute());
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  useEffect(() => {
+    if (!filteredPurchases.length) {
+      setSelectedPurchaseId(null);
+      return;
+    }
+
+    if (!selectedPurchaseId || !filteredPurchases.some((purchase) => purchase.id === selectedPurchaseId)) {
+      setSelectedPurchaseId(filteredPurchases[0].id);
+    }
+  }, [filteredPurchases, selectedPurchaseId]);
 
   return (
     <div className="min-h-screen bg-[#f4f7f5] font-sans text-[#17231d]">
-      <main className="mx-auto my-7 w-[min(1120px,calc(100%_-_32px))] md:my-[52px]">
-        <header className="mb-7 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+      <main className="mx-auto my-5 w-[min(1180px,calc(100%_-_24px))] sm:w-[min(1180px,calc(100%_-_32px))] md:my-[42px]">
+        <header className="mb-5 rounded-lg border border-[#dfe6e1] bg-[#fffdf8] px-4 py-5 shadow-[0_10px_30px_rgba(25,50,38,.05)] sm:px-5 md:mb-7 md:flex md:items-end md:justify-between md:gap-6">
           <div>
-            <span className="text-xs font-extrabold tracking-[1.8px] text-[#176b45]">ESTOQUE</span>
-            <h1 className="mb-1 mt-1 text-[clamp(28px,4vw,42px)] font-bold leading-tight">Controle de produtos</h1>
-            <p className="m-0 text-[#68756e]">Cadastre e acompanhe os produtos da sua operação.</p>
+            <span className="text-xs font-extrabold uppercase text-[#176b45]">Historico de compras</span>
+            <h1 className="mb-1 mt-1 text-[clamp(28px,4vw,42px)] font-bold leading-tight">Minhas compras</h1>
+            <p className="m-0 text-[#68756e]">Acompanhe gastos, estabelecimentos, categorias e itens comprados.</p>
           </div>
-          <button className={primaryButtonClass} onClick={() => openDialog()}>+ Novo produto</button>
+          <div className="mt-5 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap md:mt-0">
+            <button className={route === 'dashboard' ? primaryButtonClass : secondaryButtonClass} onClick={() => navigate('dashboard')}>Dashboard</button>
+            <button className={route === 'compras' ? primaryButtonClass : secondaryButtonClass} onClick={() => navigate('compras')}>Compras</button>
+            <button className={secondaryButtonClass} onClick={openReceiptScanner}>Escanear nota</button>
+            <button className={primaryButtonClass} onClick={openPurchaseDialog}>Nova compra</button>
+          </div>
         </header>
 
-        <section className="mb-4 flex flex-col gap-5 rounded-lg border border-[#dfe6e1] bg-white px-5 py-4 shadow-[0_8px_30px_rgba(25,50,38,.05)] md:flex-row md:items-end md:justify-between">
-          <label className="grid w-full max-w-[420px] gap-2 text-[13px] font-bold">
-            Buscar
-            <input
-              className="w-full rounded-lg border border-[#cbd6cf] bg-white px-3 py-3 text-[#17231d] outline-none focus:border-[#176b45] focus:shadow-[0_0_0_3px_rgba(23,107,69,.12)]"
-              type="search"
-              placeholder="Nome, categoria ou estabelecimento..."
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-          </label>
-          <div className="text-sm text-[#68756e] md:pb-3"><strong className="text-[#17231d]">{products.length}</strong> produtos cadastrados</div>
-        </section>
+        {route === 'dashboard' ? (
+          <div className="grid gap-5">
+            <section className="grid gap-4 md:grid-cols-4">
+              <div className="rounded-lg border border-[#cfded5] bg-[#173426] p-5 text-white shadow-[0_16px_38px_rgba(23,52,38,.18)] md:col-span-2">
+                <span className="text-xs font-extrabold uppercase text-[#f3c567]">{monthFormatter.format(new Date(`${currentMonth}-02T00:00:00`))}</span>
+                <p className="mt-3 text-4xl font-bold">{currency.format(monthlyTotal)}</p>
+                <p className="mt-2 text-sm text-[#c7d9ce]">Total gasto no mes atual.</p>
+              </div>
+              <div className="rounded-lg border border-[#d8e0ed] bg-[#f6f9ff] p-5 shadow-[0_10px_28px_rgba(30,64,120,.07)]">
+                <span className="text-xs font-extrabold uppercase text-[#68756e]">Compras</span>
+                <p className="mt-3 text-3xl font-bold">{currentMonthPurchases.length}</p>
+                <p className="mt-2 text-sm text-[#68756e]">Visitas registradas neste mes.</p>
+              </div>
+              <div className="rounded-lg border border-[#eadfca] bg-[#fff8ea] p-5 shadow-[0_10px_28px_rgba(120,80,30,.07)]">
+                <span className="text-xs font-extrabold uppercase text-[#68756e]">Ticket medio</span>
+                <p className="mt-3 text-3xl font-bold">{currency.format(averageTicket)}</p>
+                <p className="mt-2 text-sm text-[#68756e]">Media por compra no historico.</p>
+              </div>
+            </section>
 
-        <section className="rounded-lg border border-[#dfe6e1] bg-white shadow-[0_8px_30px_rgba(25,50,38,.05)]">
-          <div className="overflow-auto">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr>
-                  <th className={tableHeaderClass}>Produto</th>
-                  <th className={`${tableHeaderClass} hidden md:table-cell`}>Estabelecimento</th>
-                  <th className={`${tableHeaderClass} hidden md:table-cell`}>Categoria</th>
-                  <th className={tableHeaderClass}>Preço</th>
-                  <th className={tableHeaderClass}>Estoque</th>
-                  <th className={`${tableHeaderClass} hidden md:table-cell`}>Compra</th>
-                  <th className={`${tableHeaderClass} hidden md:table-cell`}>Status</th>
-                  <th className={`${tableHeaderClass} text-right`} aria-label="Ações" />
-                </tr>
-              </thead>
-              <tbody>
-                {products.map((product) => (
-                  <tr key={product.id}>
-                    <td className={tableCellClass}>
-                      <strong className="block">{product.nome}</strong>
-                      <small className="block max-w-[300px] overflow-hidden text-ellipsis text-[#68756e]">{product.estabelecimento || 'Sem estabelecimento'}</small>
-                    </td>
-                    <td className={`${tableCellClass} hidden md:table-cell`}>{product.estabelecimento || '-'}</td>
-                    <td className={`${tableCellClass} hidden md:table-cell`}>{product.categoria || '-'}</td>
-                    <td className={tableCellClass}>{currency.format(product.preco)}</td>
-                    <td className={tableCellClass}>{product.estoque}</td>
-                    <td className={`${tableCellClass} hidden md:table-cell`}>{formatPurchaseDate(product.data_compra)}</td>
-                    <td className={`${tableCellClass} hidden md:table-cell`}>
-                      <span className={`inline-block rounded-full px-2.5 py-1 text-xs font-bold ${product.ativo ? 'bg-[#e4f4eb] text-[#176b45]' : 'bg-[#eef0ef] text-[#6b746f]'}`}>
-                        {product.ativo ? 'Ativo' : 'Inativo'}
-                      </span>
-                    </td>
-                    <td className={`${tableCellClass} text-right`}>
-                      <button className={actionButtonClass} onClick={() => openDialog(product)}>Editar</button>
-                      <button className={`${actionButtonClass} text-[#b13a3a] hover:bg-[#f7e8e8]`} onClick={() => void removeProduct(product)}>Excluir</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <section className="grid gap-5 lg:grid-cols-2">
+              <BreakdownList title="Gasto por estabelecimento" items={merchantBreakdown} />
+              <BreakdownList title="Gasto por categoria" items={categoryBreakdown} />
+            </section>
+
+            <section className="grid gap-5 lg:grid-cols-3">
+              <div className={`${cardClass} p-5`}>
+                <h2 className="text-lg font-bold">Maior item do mes</h2>
+                <p className="mt-4 text-2xl font-bold">{topProduct?.label ?? '-'}</p>
+                <p className="mt-2 text-sm text-[#68756e]">{topProduct ? currency.format(topProduct.total) : 'Sem compras no mes.'}</p>
+              </div>
+              <div className="rounded-lg border border-[#d8e0ed] bg-[#f6f9ff] p-5 shadow-[0_10px_28px_rgba(30,64,120,.07)]">
+                <h2 className="text-lg font-bold">Categorias diferentes</h2>
+                <p className="mt-4 text-3xl font-bold">{categoryBreakdown.length}</p>
+                <p className="mt-2 text-sm text-[#68756e]">Variedade dos seus gastos no mes.</p>
+              </div>
+              <div className="rounded-lg border border-[#eadfca] bg-[#fff8ea] p-5 shadow-[0_10px_28px_rgba(120,80,30,.07)]">
+                <h2 className="text-lg font-bold">Ultima compra</h2>
+                <p className="mt-4 text-2xl font-bold">{purchases[0]?.estabelecimento ?? '-'}</p>
+                <p className="mt-2 text-sm text-[#68756e]">{purchases[0] ? `${formatPurchaseDate(purchases[0].data_compra)} - ${currency.format(purchases[0].total)}` : 'Nenhuma compra registrada.'}</p>
+              </div>
+            </section>
           </div>
-          {!products.length && <div className="px-5 py-14 text-center text-[#68756e]">{emptyMessage}</div>}
-        </section>
+        ) : (
+          <div className="grid gap-4">
+            <section className="rounded-lg border border-[#dfe6e1] bg-[#fffdf8] px-4 py-4 shadow-[0_10px_28px_rgba(25,50,38,.06)] sm:px-5">
+              <div className="grid gap-4">
+                <div className="grid gap-4 lg:grid-cols-[minmax(180px,1fr)_minmax(160px,.7fr)_minmax(160px,.7fr)]">
+                  <label className="grid gap-2 text-[13px] font-bold">
+                    Buscar
+                    <input
+                      className={inputClass}
+                      type="search"
+                      placeholder="Produto, categoria ou estabelecimento..."
+                      value={search}
+                      onChange={(event) => setSearch(event.target.value)}
+                    />
+                  </label>
+                  <label className="grid gap-2 text-[13px] font-bold">
+                    Estabelecimento
+                    <select className={selectClass} value={merchantFilter} onChange={(event) => setMerchantFilter(event.target.value)}>
+                      <option value="">Todos</option>
+                      {merchantOptions.map((merchant) => (
+                        <option key={merchant} value={merchant}>{merchant}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="grid gap-2 text-[13px] font-bold">
+                    Categoria
+                    <select className={selectClass} value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+                      <option value="">Todas</option>
+                      {categoryOptions.map((category) => (
+                        <option key={category} value={category}>{category}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[repeat(4,minmax(120px,1fr))_auto] lg:items-end">
+                  <label className="grid gap-2 text-[13px] font-bold">
+                    Data inicial
+                    <input
+                      className={dateInputClass}
+                      type="date"
+                      value={dateStart}
+                      onChange={(event) => setDateStart(event.target.value)}
+                    />
+                  </label>
+                  <label className="grid gap-2 text-[13px] font-bold">
+                    Data final
+                    <input
+                      className={dateInputClass}
+                      type="date"
+                      value={dateEnd}
+                      onChange={(event) => setDateEnd(event.target.value)}
+                    />
+                  </label>
+                  <label className="grid gap-2 text-[13px] font-bold">
+                    Valor minimo
+                    <input
+                      className={inputClass}
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      placeholder="R$ 0,00"
+                      value={minTotal}
+                      onChange={(event) => setMinTotal(event.target.value)}
+                    />
+                  </label>
+                  <label className="grid gap-2 text-[13px] font-bold">
+                    Valor maximo
+                    <input
+                      className={inputClass}
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      placeholder="Sem limite"
+                      value={maxTotal}
+                      onChange={(event) => setMaxTotal(event.target.value)}
+                    />
+                  </label>
+                  <button className={`${secondaryButtonClass} sm:col-span-2 lg:col-span-1`} type="button" onClick={clearPurchaseFilters}>
+                    Limpar filtros
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="rounded-lg bg-[#edf2ef] px-3 py-2 text-sm text-[#68756e]"><strong className="text-[#17231d]">{filteredPurchases.length}</strong> compras encontradas</div>
+                  <div className="rounded-lg bg-[#fff8ea] px-3 py-2 text-sm text-[#68756e]"><strong className="text-[#17231d]">{currency.format(filteredPurchases.reduce((total, purchase) => total + purchase.total, 0))}</strong> no filtro</div>
+                </div>
+              </div>
+            </section>
+
+            {filteredPurchases.length ? (
+              <section className="grid gap-4 lg:grid-cols-[minmax(0,420px)_1fr] lg:gap-5">
+                <div className="grid content-start gap-3">
+                  {filteredPurchases.map((purchase) => (
+                    <div key={purchase.id} className="grid gap-3">
+                      <button
+                        type="button"
+                        className={`group relative w-full cursor-pointer overflow-hidden rounded-lg border p-4 text-left shadow-[0_10px_26px_rgba(25,50,38,.08)] transition hover:-translate-y-0.5 hover:shadow-[0_16px_36px_rgba(25,50,38,.12)] active:translate-y-px sm:p-5 ${selectedPurchase?.id === purchase.id ? 'border-[#176b45] bg-[#173426] text-white' : 'border-[#dbe3de] bg-[#fffdf8] text-[#17231d]'}`}
+                        onClick={() => setSelectedPurchaseId(purchase.id)}
+                      >
+                        <div className={`absolute inset-y-0 left-0 w-1.5 ${selectedPurchase?.id === purchase.id ? 'bg-[#f3c567]' : 'bg-[#176b45]'}`} />
+                        <div className="flex items-start justify-between gap-3 pl-1">
+                          <div className="min-w-0">
+                            <strong className="block overflow-hidden text-ellipsis whitespace-nowrap text-lg">{purchase.estabelecimento}</strong>
+                            <span className={`mt-1 block text-sm ${selectedPurchase?.id === purchase.id ? 'text-[#c7d9ce]' : 'text-[#68756e]'}`}>{formatPurchaseDate(purchase.data_compra)}</span>
+                          </div>
+                          <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${selectedPurchase?.id === purchase.id ? 'bg-[rgba(255,255,255,.12)] text-white' : 'bg-[#e4f4eb] text-[#176b45]'}`}>{purchase.items.length} itens</span>
+                        </div>
+                        <div className="mt-5 grid gap-3 pl-1 sm:flex sm:items-end sm:justify-between">
+                          <span className="text-2xl font-bold">{currency.format(purchase.total)}</span>
+                          <span className={`min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-sm ${selectedPurchase?.id === purchase.id ? 'text-[#c7d9ce]' : 'text-[#68756e]'}`}>{purchase.categories.slice(0, 2).join(', ')}</span>
+                        </div>
+                      </button>
+
+                      {selectedPurchase?.id === purchase.id && (
+                        <section className="rounded-lg border border-[#d8e0ed] bg-[#f6f9ff] p-4 shadow-[0_12px_32px_rgba(30,64,120,.08)] lg:hidden">
+                          <div className="mb-4 flex items-start justify-between gap-3">
+                            <div>
+                              <span className="text-xs font-extrabold uppercase text-[#176b45]">Produtos</span>
+                              <h2 className="mt-1 text-xl font-bold">{purchase.estabelecimento}</h2>
+                            </div>
+                            <strong className="text-lg">{currency.format(purchase.total)}</strong>
+                          </div>
+                          <div className="grid gap-3">
+                            {purchase.items.map((item) => (
+                              <article key={item.id} className="grid gap-3 rounded-lg border border-[#dbe3de] bg-white p-4">
+                                <div className="min-w-0">
+                                  <strong className="block overflow-hidden text-ellipsis whitespace-nowrap">{item.nome}</strong>
+                                  <span className="mt-1 block text-sm text-[#68756e]">{item.categoria || 'Sem categoria'} - Qtde. {Math.max(1, item.estoque)}</span>
+                                </div>
+                                <div className="grid gap-2 sm:flex sm:items-center sm:justify-between">
+                                  <span className="font-bold">{currency.format(productTotal(item))}</span>
+                                  <div className="flex flex-wrap gap-1">
+                                    <button className={actionButtonClass} onClick={() => openProductDialog(item)}>Editar</button>
+                                    <button className={`${actionButtonClass} text-[#b13a3a] hover:bg-[#f7e8e8]`} onClick={() => void removeProduct(item)}>Excluir</button>
+                                  </div>
+                                </div>
+                              </article>
+                            ))}
+                          </div>
+                        </section>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <section className="hidden rounded-lg border border-[#d8e0ed] bg-[#f6f9ff] p-4 shadow-[0_12px_32px_rgba(30,64,120,.08)] sm:p-5 lg:block lg:min-h-[360px]">
+                  {selectedPurchase ? (
+                    <div className="grid gap-5">
+                      <header className="flex flex-col gap-3 border-b border-[#edf1ee] pb-5 md:flex-row md:items-start md:justify-between">
+                        <div>
+                          <span className="text-xs font-extrabold uppercase text-[#176b45]">Detalhe da compra</span>
+                          <h2 className="mt-1 text-2xl font-bold">{selectedPurchase.estabelecimento}</h2>
+                          <p className="mt-1 text-sm text-[#68756e]">{formatPurchaseDate(selectedPurchase.data_compra)}</p>
+                        </div>
+                        <div className="text-left md:text-right">
+                          <span className="block text-xs font-extrabold uppercase text-[#68756e]">Total</span>
+                          <strong className="text-2xl">{currency.format(selectedPurchase.total)}</strong>
+                        </div>
+                      </header>
+
+                      <div className="grid gap-3">
+                        {selectedPurchase.items.map((item) => (
+                          <article key={item.id} className="grid gap-3 rounded-lg border border-[#dbe3de] bg-white p-4 shadow-[0_6px_16px_rgba(25,50,38,.04)] md:grid-cols-[1fr_110px_140px_156px] md:items-center">
+                            <div className="min-w-0">
+                              <strong className="block overflow-hidden text-ellipsis whitespace-nowrap">{item.nome}</strong>
+                              <span className="mt-1 block text-sm text-[#68756e]">{item.categoria || 'Sem categoria'}</span>
+                            </div>
+                            <span className="text-sm text-[#68756e]">Qtde. {Math.max(1, item.estoque)}</span>
+                            <span className="font-bold">{currency.format(productTotal(item))}</span>
+                            <div className="flex gap-1 md:justify-end">
+                              <button className={actionButtonClass} onClick={() => openProductDialog(item)}>Editar</button>
+                              <button className={`${actionButtonClass} text-[#b13a3a] hover:bg-[#f7e8e8]`} onClick={() => void removeProduct(item)}>Excluir</button>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid h-full place-items-center py-14 text-center text-[#68756e]">Selecione uma compra para ver os produtos.</div>
+                  )}
+                </section>
+              </section>
+            ) : (
+              <section className={`${cardClass} px-5 py-14 text-center text-[#68756e]`}>{emptyMessage}</section>
+            )}
+          </div>
+        )}
       </main>
 
       <ProductDialog
         product={editingProduct}
-        isOpen={isDialogOpen}
+        isOpen={isProductDialogOpen}
         error={formError}
-        onClose={closeDialog}
+        onClose={closeProductDialog}
         onSubmit={saveProduct}
+      />
+      <PurchaseDialog
+        isOpen={isPurchaseDialogOpen}
+        error={formError}
+        onClose={closePurchaseDialog}
+        onSubmit={savePurchase}
+      />
+      <ReceiptScannerDialog
+        isOpen={isReceiptScannerOpen}
+        error={formError}
+        onClose={closeReceiptScanner}
+        onImport={importReceiptPurchase}
       />
       <div
         className={`pointer-events-none fixed bottom-5 right-5 rounded-lg bg-[#17231d] px-4 py-3 text-white transition duration-200 ${toast ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'}`}

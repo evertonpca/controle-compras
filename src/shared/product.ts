@@ -7,6 +7,7 @@ export interface Product {
   estoque: number;
   ativo: number;
   data_compra: string;
+  purchase_id: string;
   criado_em: string;
 }
 
@@ -18,6 +19,7 @@ export interface ProductInput {
   estoque: number;
   ativo: boolean | number;
   data_compra: string;
+  purchase_id?: string;
 }
 
 export interface NormalizedProductInput {
@@ -28,4 +30,5 @@ export interface NormalizedProductInput {
   estoque: number;
   ativo: 0 | 1;
   data_compra: string;
+  purchase_id: string;
 }

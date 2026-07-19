@@ -14,6 +14,7 @@ export function ensureProductSchema(db: Database.Database): void {
       estoque INTEGER NOT NULL DEFAULT 0 CHECK (estoque >= 0),
       ativo INTEGER NOT NULL DEFAULT 1,
       data_compra TEXT NOT NULL DEFAULT '',
+      purchase_id TEXT NOT NULL DEFAULT '',
       criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `);
@@ -29,6 +30,10 @@ export function ensureProductSchema(db: Database.Database): void {
   if (!columnNames.has('data_compra')) {
     db.exec("ALTER TABLE produtos ADD COLUMN data_compra TEXT NOT NULL DEFAULT ''");
   }
+
+  if (!columnNames.has('purchase_id')) {
+    db.exec("ALTER TABLE produtos ADD COLUMN purchase_id TEXT NOT NULL DEFAULT ''");
+  }
 }
 
 export class ProductRepository {
@@ -37,7 +42,7 @@ export class ProductRepository {
   list(searchTerm = ''): Product[] {
     const busca = `%${searchTerm.trim()}%`;
     return this.db.prepare(`
-      SELECT id, nome, estabelecimento, categoria, preco, estoque, ativo, data_compra, criado_em
+      SELECT id, nome, estabelecimento, categoria, preco, estoque, ativo, data_compra, purchase_id, criado_em
       FROM produtos
       WHERE nome LIKE ? OR categoria LIKE ? OR estabelecimento LIKE ?
       ORDER BY id DESC
@@ -46,8 +51,8 @@ export class ProductRepository {
 
   create(product: NormalizedProductInput): Product {
     const info = this.db.prepare(`
-      INSERT INTO produtos (nome, estabelecimento, categoria, preco, estoque, ativo, data_compra)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO produtos (nome, estabelecimento, categoria, preco, estoque, ativo, data_compra, purchase_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       product.nome,
       product.estabelecimento,
@@ -55,7 +60,8 @@ export class ProductRepository {
       product.preco,
       product.estoque,
       product.ativo,
-      product.data_compra
+      product.data_compra,
+      product.purchase_id
     );
 
     return this.findById(Number(info.lastInsertRowid)) as Product;
@@ -64,7 +70,7 @@ export class ProductRepository {
   update(id: number, product: NormalizedProductInput): Product | null {
     const info = this.db.prepare(`
       UPDATE produtos
-      SET nome = ?, estabelecimento = ?, categoria = ?, preco = ?, estoque = ?, ativo = ?, data_compra = ?
+      SET nome = ?, estabelecimento = ?, categoria = ?, preco = ?, estoque = ?, ativo = ?, data_compra = ?, purchase_id = ?
       WHERE id = ?
     `).run(
       product.nome,
@@ -74,6 +80,7 @@ export class ProductRepository {
       product.estoque,
       product.ativo,
       product.data_compra,
+      product.purchase_id,
       id
     );
 
@@ -88,7 +95,7 @@ export class ProductRepository {
 
   private findById(id: number): Product | null {
     return this.db.prepare(`
-      SELECT id, nome, estabelecimento, categoria, preco, estoque, ativo, data_compra, criado_em
+      SELECT id, nome, estabelecimento, categoria, preco, estoque, ativo, data_compra, purchase_id, criado_em
       FROM produtos
       WHERE id = ?
     `).get(id) as Product | undefined ?? null;
