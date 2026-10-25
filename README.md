@@ -9,7 +9,7 @@ npm install
 npm run dev
 ```
 
-- Frontend: `http://localhost:5173`
+- Frontend: `https://localhost:5173` (certificado local de desenvolvimento)
 - Backend/API: `http://localhost:3000`
 - Banco local: `data/produtos.db`, criado automaticamente.
 
@@ -60,3 +60,42 @@ Os tipos principais ficam em `src/shared/product.ts`. Quando o contrato de produ
 O campo antigo de descrição foi substituído por `estabelecimento`. O campo `data_compra` pode ficar vazio; nesse caso, a UI mostra a data de hoje na tabela sem gravar esse valor automaticamente no banco.
 
 Para produção, rode `npm run build` e depois `npm start`. O Express passa a servir os arquivos estáticos gerados pelo Vite em `dist/client`.
+
+## Publicar no Render com Neon
+
+O backend usa PostgreSQL quando `DATABASE_URL` está definida e cria a tabela automaticamente antes de iniciar. Sem essa variável, usa SQLite apenas em desenvolvimento. Em produção, a ausência de `DATABASE_URL` impede a inicialização para evitar perda de dados no disco temporário do Render.
+
+1. No Neon, crie um projeto Free chamado `controle-compras`. Em **Connect**, copie a connection string PostgreSQL completa, com os parâmetros de SSL. A opção de conexão com pooling pode ser usada.
+2. Envie este código (incluindo `render.yaml` e `package-lock.json`) para o GitHub.
+3. No Render, clique em **New > Blueprint**, conecte o repositório e selecione a branch com estas alterações.
+4. O Render lê `render.yaml`, que configura um único Web Service no plano **Free**, para frontend e API juntos. Informe `DATABASE_URL` com a URL do Neon quando solicitado e confira o plano Free antes de criar os recursos.
+5. Depois do deploy, abra a URL HTTPS exibida pelo Render. Cadastre uma compra, reinicie o serviço e confira que ela continua salva.
+
+Se preferir **New > Web Service**, preencha:
+
+| Campo | Valor |
+| --- | --- |
+| Runtime | Node |
+| Root Directory | Vazio |
+| Build Command | `npm ci --include=dev && npm run build` |
+| Start Command | `npm start` |
+| Instance Type | Free |
+| Health Check Path | `/api/produtos` |
+| Environment: NODE_VERSION | `24.22.1` |
+| Environment: NODE_ENV | `production` |
+| Environment: DATABASE_URL | URL PostgreSQL completa do Neon |
+
+Não crie um banco no Render: o banco fica no Neon. Não é necessário publicar o frontend separadamente, nem configurar uma URL de API no cliente. O Express usa a porta fornecida pelo Render em `PORT`.
+
+A URL do banco é segredo: configure-a somente no backend, sem prefixo `VITE_`, e não a envie para o GitHub. A aplicação atual não possui login: qualquer pessoa com acesso ao site pode consultar e alterar as compras. Os registros do SQLite local não são transferidos automaticamente para o Neon.
+
+O serviço Free do Render dorme após 15 minutos sem tráfego e pode levar cerca de um minuto para voltar. O HTTPS público é gerenciado pelo Render, inclusive para uso da câmera no celular. Os limites gratuitos podem mudar; consulte https://render.com/docs/free e https://neon.com/pricing.
+
+Para testar PostgreSQL localmente no PowerShell:
+
+```powershell
+$env:DATABASE_URL = 'COLE_AQUI_A_URL_DO_NEON'
+npm run dev
+```
+
+O arquivo `.env.example` é apenas uma referência; o backend lê as variáveis do processo e não carrega `.env` automaticamente. Os testes executam o mesmo fluxo de produtos em SQLite e em PostgreSQL emulado (`pg-mem`); uma conexão real com Neon deve ser conferida após o deploy.

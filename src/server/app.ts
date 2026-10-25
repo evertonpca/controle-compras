@@ -1,12 +1,12 @@
 import cors from 'cors';
 import express, { type ErrorRequestHandler } from 'express';
 import path from 'node:path';
-import { ProductRepository } from './repositories/productRepository.js';
+import type { ProductStore } from './repositories/productStore.js';
 import { createProductRouter } from './routes/productRoutes.js';
 import { createReceiptRouter } from './routes/receiptRoutes.js';
 
 interface CreateAppOptions {
-  productRepository: ProductRepository;
+  productRepository: ProductStore;
 }
 
 export function createApp({ productRepository }: CreateAppOptions): express.Express {
