@@ -2,6 +2,9 @@ import type { ProductInput } from './product.js';
 
 export interface ReceiptItem extends Omit<ProductInput, 'preco'> {
   preco: number | null;
+  quantidade_lida?: number;
+  unidade_lida?: string;
+  preco_unitario_lido?: number | null;
 }
 
 export interface ReceiptPreview {

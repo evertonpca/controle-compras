@@ -12,6 +12,7 @@ let root: Root;
 const text = 'MERCADO\nEmissao: 25/10/2026\n001 LEITE INT 1L 2 UN x 5,00 10,00\nTOTAL 10,00';
 
 beforeEach(() => {
+  vi.clearAllMocks();
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   HTMLDialogElement.prototype.showModal = function () { this.open = true; };
   HTMLDialogElement.prototype.close = function () { this.open = false; };
@@ -34,10 +35,11 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-async function selectPhoto() {
+async function selectPhoto(read = true) {
   const input = container.querySelector<HTMLInputElement>('input[type=file]')!;
   Object.defineProperty(input, 'files', { configurable: true, value: [new File(['image'], 'nota.jpg', { type: 'image/jpeg' })] });
   await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); });
+  if (read) await act(async () => { [...container.querySelectorAll('button')].find((button) => button.textContent === 'Ler produtos')!.click(); });
 }
 
 describe('foto e revisao da nota', () => {
@@ -46,13 +48,17 @@ describe('foto e revisao da nota', () => {
     await act(async () => root.render(createElement(ReceiptPhotoDialog, { isOpen: true, error: '', onClose: vi.fn(), onImport })));
     expect(container.querySelector('input[capture=environment]')).not.toBeNull();
     expect(container.querySelector('input[type=submit]')).toBeNull();
-    await selectPhoto();
+    await selectPhoto(false);
+    expect(readReceiptPhoto).not.toHaveBeenCalled();
+    expect(container.querySelector('input[type=range]')).not.toBeNull();
+    await act(async () => { [...container.querySelectorAll('button')].find((button) => button.textContent === 'Ler produtos')!.click(); });
     expect(container.querySelector<HTMLInputElement>('input[value="Leite Integral 1l"]')).not.toBeNull();
     expect(container.querySelector<HTMLInputElement>('input[type=number][step="0.01"]')?.value).toBe('5');
     expect(onImport).not.toHaveBeenCalled();
     await act(async () => { container.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
     expect(onImport).toHaveBeenCalledWith([expect.objectContaining({ nome: 'Leite Integral 1l', preco: 5, estoque: 2, data_compra: '2026-10-25' })]);
     expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body))).toEqual({ text });
+    expect(vi.mocked(readReceiptPhoto).mock.calls[0][3]).toEqual({ top: 0, bottom: 100, left: 0, right: 100 });
   });
 
   it('cancela o OCR ao fechar e libera a foto sem aplicar resultados atrasados', async () => {
@@ -77,5 +83,28 @@ describe('foto e revisao da nota', () => {
     await selectPhoto();
     expect(container.querySelector('[role=alert]')?.textContent).toBe('Foto ilegivel.');
     expect(container.querySelector<HTMLButtonElement>('button[type=submit]')?.disabled).toBe(true);
+  });
+
+  it('le somente a faixa selecionada e exige nova leitura depois de mudar o recorte', async () => {
+    await act(async () => root.render(createElement(ReceiptPhotoDialog, { isOpen: true, error: '', onClose: vi.fn(), onImport: vi.fn() })));
+    await selectPhoto(false);
+    const sliders = container.querySelectorAll<HTMLInputElement>('input[type=range]');
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    await act(async () => {
+      setValue.call(sliders[0], '20');
+      sliders[0].dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      setValue.call(sliders[1], '45');
+      sliders[1].dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => { [...container.querySelectorAll('button')].find((button) => button.textContent === 'Ler produtos')!.click(); });
+    expect(vi.mocked(readReceiptPhoto).mock.calls[0][3]).toEqual({ left: 0, right: 100, top: 20, bottom: 45 });
+    expect(container.querySelector<HTMLButtonElement>('button[type=submit]')!.disabled).toBe(false);
+    await act(async () => {
+      setValue.call(sliders[0], '22');
+      sliders[0].dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(container.querySelector<HTMLButtonElement>('button[type=submit]')!.disabled).toBe(true);
   });
 });

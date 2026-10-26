@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm:dev:server\" \"npm:dev:client\"",
-    "dev:server": "tsx watch src/server/index.ts",
+    "dev:server": "node --watch --import tsx src/server/index.ts",
     "predev:client": "node scripts/prepare-ocr.mjs",
     "dev:client": "vite --host 0.0.0.0",
     "build": "npm run build:client && npm run build:server",

@@ -3,6 +3,8 @@ import type { ProductInput } from '../../shared/product.js';
 import type { ReceiptItem, ReceiptPreview } from '../../shared/receipt.js';
 import { previewReceipt } from '../services/receiptsApi.js';
 import { readReceiptPhoto } from '../services/receiptOcr.js';
+import { fullReceipt, type ReceiptCrop } from '../services/receiptImage.js';
+import { ReceiptPhotoSelection } from './ReceiptPhotoSelection.js';
 
 interface ReceiptPhotoDialogProps {
   isOpen: boolean;
@@ -16,6 +18,9 @@ interface ReceiptItemForm {
   categoria: string;
   quantidade: number;
   preco: number | '';
+  quantidadeLida?: number;
+  unidadeLida?: string;
+  precoUnitarioLido?: number | null;
 }
 
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -30,7 +35,10 @@ function receiptItemsToForm(items: ReceiptItem[]): ReceiptItemForm[] {
     nome: item.nome,
     categoria: item.categoria,
     quantidade: Number(item.estoque) || 1,
-    preco: item.preco ?? ''
+    preco: item.preco ?? '',
+    quantidadeLida: item.quantidade_lida,
+    unidadeLida: item.unidade_lida,
+    precoUnitarioLido: item.preco_unitario_lido
   }));
 }
 
@@ -48,6 +56,8 @@ export function ReceiptPhotoDialog({ isOpen, error, onClose, onImport }: Receipt
   const [localError, setLocalError] = useState('');
   const [status, setStatus] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [crop, setCrop] = useState<ReceiptCrop>({ ...fullReceipt });
   const [recognizedText, setRecognizedText] = useState('');
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -57,10 +67,16 @@ export function ReceiptPhotoDialog({ isOpen, error, onClose, onImport }: Receipt
     const dialog = dialogRef.current;
     if (isOpen && !dialog?.open) dialog?.showModal();
     if (!isOpen && dialog?.open) dialog.close();
-    if (!isOpen) return;
+    if (!isOpen) {
+      setPhotoUrl('');
+      setSelectedFile(null);
+      return;
+    }
     setPreview(null);
     setItems([]);
     setPhotoUrl('');
+    setSelectedFile(null);
+    setCrop({ ...fullReceipt });
     setRecognizedText('');
     setEstabelecimento('');
     setDataCompra('');
@@ -81,8 +97,21 @@ export function ReceiptPhotoDialog({ isOpen, error, onClose, onImport }: Receipt
     setItems(receiptItemsToForm(result.items));
   }
 
-  async function scanPhoto(file: File | null) {
+  function selectPhoto(file: File | null) {
     if (!file) return;
+    requestRef.current?.abort();
+    setSelectedFile(file);
+    setPhotoUrl(URL.createObjectURL(file));
+    setCrop({ ...fullReceipt });
+    setPreview(null);
+    setItems([]);
+    setRecognizedText('');
+    setLocalError('');
+    setStatus('Selecione a lista de produtos e toque em Ler produtos.');
+  }
+
+  async function scanPhoto() {
+    if (!selectedFile) return;
     requestRef.current?.abort();
     const controller = new AbortController();
     requestRef.current = controller;
@@ -90,15 +119,18 @@ export function ReceiptPhotoDialog({ isOpen, error, onClose, onImport }: Receipt
     setItems([]);
     setRecognizedText('');
     setLocalError('');
-    setPhotoUrl(URL.createObjectURL(file));
     setIsLoadingPreview(true);
     try {
-      const text = await readReceiptPhoto(file, controller.signal, setStatus);
+      let photoWarning = '';
+      const text = await readReceiptPhoto(selectedFile, controller.signal, (message) => {
+        if (message.startsWith('Foto com baixa nitidez')) photoWarning = message;
+        setStatus(message);
+      }, crop);
       if (controller.signal.aborted) return;
       setRecognizedText(text);
       setStatus('Organizando produtos e precos...');
       await loadPreview(text, controller.signal);
-      if (!controller.signal.aborted) setStatus('Leitura concluida. Revise os itens abaixo.');
+      if (!controller.signal.aborted) setStatus(photoWarning || 'Leitura concluida. Revise os produtos e valores antes de importar.');
     } catch (error) {
       if (!controller.signal.aborted) {
         setStatus('');
@@ -177,16 +209,17 @@ export function ReceiptPhotoDialog({ isOpen, error, onClose, onImport }: Receipt
 
         <section className="grid gap-4 lg:grid-cols-[360px_1fr]">
           <div className="grid gap-3">
-            <p className="text-sm text-[#68756e]">Fotografe a nota inteira, em uma superficie plana e bem iluminada. Mantenha os nomes e precos legiveis.</p>
-            {photoUrl && <img src={photoUrl} alt="Foto da nota fiscal para conferencia" className="max-h-96 w-full rounded-lg border border-[#d8e0ed] object-contain" />}
+            <p className="text-sm text-[#68756e]">Fotografe de perto a lista de produtos, com nomes e precos legiveis. Voce pode selecionar essa parte da foto antes de ler.</p>
             <label className={`${primaryButtonClass} grid place-items-center text-center`}>
               Tirar foto da nota
-              <input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" disabled={isLoadingPreview || isSaving} onChange={(event) => { void scanPhoto(event.target.files?.[0] ?? null); event.target.value = ''; }} />
+              <input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" disabled={isLoadingPreview || isSaving} onChange={(event) => { selectPhoto(event.target.files?.[0] ?? null); event.target.value = ''; }} />
             </label>
             <label className={`${secondaryButtonClass} grid place-items-center text-center`}>
               Escolher foto da galeria
-              <input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" disabled={isLoadingPreview || isSaving} onChange={(event) => { void scanPhoto(event.target.files?.[0] ?? null); event.target.value = ''; }} />
+              <input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" disabled={isLoadingPreview || isSaving} onChange={(event) => { selectPhoto(event.target.files?.[0] ?? null); event.target.value = ''; }} />
             </label>
+            {photoUrl && <ReceiptPhotoSelection photoUrl={photoUrl} crop={crop} disabled={isLoadingPreview || isSaving} onChange={(next) => { setCrop(next); setPreview(null); setItems([]); setRecognizedText(''); setStatus('Selecao alterada. Toque em Ler produtos.'); }} />}
+            {selectedFile && <button type="button" className={primaryButtonClass} disabled={isLoadingPreview || isSaving} onClick={() => void scanPhoto()}>{isLoadingPreview ? 'Lendo produtos...' : 'Ler produtos'}</button>}
             <p className="min-h-[18px] text-sm text-[#68756e]" role="status" aria-live="polite">{status}</p>
             <p className="text-xs text-[#68756e]">Leitura gratuita no seu dispositivo. A foto nao e enviada nem armazenada no servidor.</p>
             {recognizedText && <details className="grid gap-2">
@@ -199,6 +232,7 @@ export function ReceiptPhotoDialog({ isOpen, error, onClose, onImport }: Receipt
           </div>
 
           <div className="grid content-start gap-4">
+            <h3 className="text-lg font-bold">{preview ? `${items.length} produtos encontrados` : 'Produtos da compra'}</h3>
             <div className="grid gap-4 sm:grid-cols-2 sm:items-end">
               <label className={`${labelClass} sm:col-span-2`}>
                 Estabelecimento
@@ -222,21 +256,23 @@ export function ReceiptPhotoDialog({ isOpen, error, onClose, onImport }: Receipt
               {items.map((item, index) => (
                 <div key={index} className="grid gap-3 rounded-lg border border-[#dfe6e1] bg-white p-3 shadow-[0_6px_16px_rgba(25,50,38,.04)] sm:grid-cols-[1fr_90px_120px] sm:items-end">
                   <label className={`${labelClass} sm:col-span-3`}>
-                    Item
+                    Produto
                     <input className={inputClass} maxLength={120} required value={item.nome} onChange={(event) => updateItem(index, { ...item, nome: event.target.value })} />
+                    {item.unidadeLida && /^(?:KG|G|LT|L)$/.test(item.unidadeLida) && <span className="text-xs font-normal text-[#68756e]">{item.quantidadeLida?.toLocaleString('pt-BR', { maximumFractionDigits: 3 })} {item.unidadeLida.toLowerCase()}{item.precoUnitarioLido != null ? ` · ${currency.format(item.precoUnitarioLido)}/${item.unidadeLida.toLowerCase()}` : ''}. O valor abaixo e o pago pela porcao.</span>}
                   </label>
                   <label className={labelClass}>
                     Categoria
                     <input className={inputClass} maxLength={80} value={item.categoria} onChange={(event) => updateItem(index, { ...item, categoria: event.target.value })} />
                   </label>
                   <label className={labelClass}>
-                    Qtde.
+                    {item.unidadeLida && /^(?:KG|G|LT|L)$/.test(item.unidadeLida) ? 'Porcoes' : 'Qtde.'}
                     <input className={inputClass} type="number" min={1} step={1} required value={item.quantidade} onChange={(event) => updateItem(index, { ...item, quantidade: Number(event.target.value) })} />
                   </label>
                   <label className={labelClass}>
-                    Preco unit. (R$)
+                    {item.unidadeLida && /^(?:KG|G|LT|L)$/.test(item.unidadeLida) ? 'Valor pago (R$)' : 'Preco unit. (R$)'}
                     <input className={inputClass} type="number" min={0} step="0.01" required value={item.preco} onChange={(event) => updateItem(index, { ...item, preco: event.target.value === '' ? '' : Number(event.target.value) })} />
                   </label>
+                  <p className="text-sm font-bold sm:col-span-3">Total do produto: {currency.format(Number(item.preco) * item.quantidade)}</p>
                   <button type="button" className={`${ghostButtonClass} text-[#b13a3a] hover:bg-[#f7e8e8] disabled:cursor-not-allowed disabled:opacity-50 sm:col-span-3 sm:justify-self-end`} onClick={() => removeItem(index)} disabled={items.length === 1 || isSaving}>
                     Remover
                   </button>
