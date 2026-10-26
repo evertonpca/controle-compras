@@ -121,3 +121,11 @@ Em **Fotografar nota**, use a camera traseira do celular ou escolha uma foto da 
 A foto e processada no navegador com Tesseract.js; somente o texto reconhecido vai para a API. O build inclui os arquivos do OCR em portugues. Fotos pouco nitidas e layouts diferentes podem exigir ajustes manuais.
 
 Veja [o fluxo de importacao e suas limitacoes](IMPORTACAO_NOTA_FISCAL.md).
+
+## Importacao experimental com IA externa
+
+No botao **Experimental · IA**, copie o prompt e abra o ChatGPT (ou outra IA) em outra aba. Envie a foto da nota com o prompt e cole a resposta JSON no campo indicado. A lista aparece automaticamente para revisar nomes, valores, estabelecimento e data antes de **Registrar compra**. Nenhuma chave de API e necessaria.
+
+O formato esperado e `{"itens":[{"nome":"Produto","preco":12.34}]}`. Cada linha representa o valor total pago pelo produto e e registrada com quantidade 1, inclusive produtos por peso ou linhas com varias unidades. Produtos repetidos permanecem separados. O prompt pede descontos associados ao item; descontos gerais nao sao distribuidos automaticamente. Confira o total com a nota e ajuste os valores antes de registrar.
+
+O botao copia para a area de transferencia do navegador; o historico depende do sistema operacional. Se a copia for bloqueada, o prompt fica disponivel para copia manual. Se o servidor confirmar parte dos itens e falhar depois, **Continuar registro** retoma os itens restantes enquanto o dialogo permanecer na mesma pagina, inclusive ao fechar e reabrir a secao. Recarregar a pagina perde essa retomada; confira as compras antes de importar novamente.

@@ -3,6 +3,7 @@ import type { Product, ProductInput } from '../shared/product.js';
 import { ProductDialog } from './components/ProductDialog.js';
 import { PurchaseDialog } from './components/PurchaseDialog.js';
 import { ReceiptPhotoDialog } from './components/ReceiptPhotoDialog.js';
+import { ExperimentalReceiptDialog } from './components/ExperimentalReceiptDialog.js';
 import { createProduct, deleteProduct, listProducts, updateProduct } from './services/productsApi.js';
 
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -122,6 +123,7 @@ export function App() {
   const [isProductDialogOpen, setIsProductDialogOpen] = useState(false);
   const [isPurchaseDialogOpen, setIsPurchaseDialogOpen] = useState(false);
   const [isReceiptPhotoOpen, setIsReceiptPhotoOpen] = useState(false);
+  const [isExperimentalReceiptOpen, setIsExperimentalReceiptOpen] = useState(false);
   const [selectedPurchaseId, setSelectedPurchaseId] = useState<string | null>(null);
   const [dateStart, setDateStart] = useState('');
   const [dateEnd, setDateEnd] = useState('');
@@ -345,6 +347,7 @@ export function App() {
             <button className={route === 'dashboard' ? primaryButtonClass : secondaryButtonClass} onClick={() => navigate('dashboard')}>Dashboard</button>
             <button className={route === 'compras' ? primaryButtonClass : secondaryButtonClass} onClick={() => navigate('compras')}>Compras</button>
             <button className={secondaryButtonClass} onClick={openReceiptPhoto}>Fotografar nota</button>
+            <button className={secondaryButtonClass} onClick={() => setIsExperimentalReceiptOpen(true)}>Experimental · IA</button>
             <button className={primaryButtonClass} onClick={openPurchaseDialog}>Nova compra</button>
           </div>
         </header>
@@ -600,6 +603,19 @@ export function App() {
         error={formError}
         onClose={closeReceiptPhoto}
         onImport={importReceiptPurchase}
+      />
+      <ExperimentalReceiptDialog
+        isOpen={isExperimentalReceiptOpen}
+        onClose={() => setIsExperimentalReceiptOpen(false)}
+        onCreateItem={createProduct}
+        onImported={async (purchaseId) => {
+          setIsExperimentalReceiptOpen(false);
+          clearPurchaseFilters();
+          navigate('compras');
+          await loadProducts();
+          setSelectedPurchaseId(purchaseId);
+          showToast('Compra importada pela seção experimental.');
+        }}
       />
       <div
         className={`pointer-events-none fixed bottom-5 right-5 rounded-lg bg-[#17231d] px-4 py-3 text-white transition duration-200 ${toast ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'}`}
