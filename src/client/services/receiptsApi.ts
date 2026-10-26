@@ -7,11 +7,12 @@ async function parseError(response: Response): Promise<string> {
   return data?.erro ?? 'Nao foi possivel concluir a leitura da nota fiscal.';
 }
 
-export async function previewReceipt(qrCodeText: string): Promise<ReceiptPreview> {
+export async function previewReceipt(text: string, signal?: AbortSignal): Promise<ReceiptPreview> {
   const response = await fetch('/api/notas-fiscais/preview', {
     method: 'POST',
     headers: jsonHeaders,
-    body: JSON.stringify({ qrCodeText })
+    body: JSON.stringify({ text }),
+    signal
   });
 
   if (!response.ok) throw new Error(await parseError(response));

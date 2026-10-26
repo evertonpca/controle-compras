@@ -113,3 +113,11 @@ npm run test:neon
 O CLI mantém o vínculo local em `.neon` (ignorado pelo Git) e as credenciais em `.env.local` ou no `.env` existente. `neon.ts` declara apenas PostgreSQL; Auth permanece desabilitado. O servidor Express continua hospedado no Render, que precisa receber `DATABASE_URL` e, se disponível, `DATABASE_URL_UNPOOLED` nas variáveis de ambiente.
 
 `npm test` executa os testes locais, incluindo PostgreSQL emulado (`pg-mem`). `npm run test:neon` exige o build e uma conexão real: inicia o backend compilado, verifica a interface, cria/atualiza uma compra, confirma a gravação diretamente no PostgreSQL, reinicia o backend e verifica persistência, depois remove apenas o registro criado pelo teste. Esse comando usa o banco apontado pelas variáveis locais.
+
+## Importar compras por foto
+
+Em **Fotografar nota**, use a camera traseira do celular ou escolha uma foto da galeria. O leitor gratuito identifica produtos e precos, normaliza nomes e permite revisar tudo antes de salvar a compra. Nao exige chave de API ou configuracao adicional no Render.
+
+A foto e processada no navegador com Tesseract.js; somente o texto reconhecido vai para a API. O build inclui os arquivos do OCR em portugues. Fotos pouco nitidas e layouts diferentes podem exigir ajustes manuais.
+
+Veja [o fluxo de importacao e suas limitacoes](IMPORTACAO_NOTA_FISCAL.md).

@@ -5,7 +5,7 @@ export function createReceiptRouter(): Router {
   const router = Router();
 
   router.post('/preview', (req, res) => {
-    const result = buildReceiptPreview(req.body?.qrCodeText);
+    const result = buildReceiptPreview(req.body?.text);
     if ('error' in result) return res.status(400).json({ erro: result.error });
 
     return res.json(result.preview);

@@ -7,8 +7,10 @@
   "scripts": {
     "dev": "concurrently \"npm:dev:server\" \"npm:dev:client\"",
     "dev:server": "tsx watch src/server/index.ts",
+    "predev:client": "node scripts/prepare-ocr.mjs",
     "dev:client": "vite --host 0.0.0.0",
     "build": "npm run build:client && npm run build:server",
+    "prebuild:client": "node scripts/prepare-ocr.mjs",
     "build:client": "vite build",
     "build:server": "tsc -p tsconfig.server.json",
     "start": "node dist/server/server/index.js",
@@ -20,14 +22,14 @@
   "dependencies": {
     "@neon/config": "^1.9.4",
     "@neon/env": "^1.6.5",
-    "@zxing/browser": "^0.2.1",
-    "@zxing/library": "^0.23.0",
+    "@tesseract.js-data/por": "^1.0.0",
     "better-sqlite3": "^12.2.0",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "pg": "^8.23.1",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

@@ -13,7 +13,7 @@ export function createApp({ productRepository }: CreateAppOptions): express.Expr
   const app = express();
 
   app.use(cors());
-  app.use(express.json());
+  app.use(express.json({ limit: '150kb' }));
   app.use('/api/produtos', createProductRouter(productRepository));
   app.use('/api/notas-fiscais', createReceiptRouter());
 

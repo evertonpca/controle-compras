@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { Product, ProductInput } from '../shared/product.js';
 import { ProductDialog } from './components/ProductDialog.js';
 import { PurchaseDialog } from './components/PurchaseDialog.js';
-import { ReceiptScannerDialog } from './components/ReceiptScannerDialog.js';
+import { ReceiptPhotoDialog } from './components/ReceiptPhotoDialog.js';
 import { createProduct, deleteProduct, listProducts, updateProduct } from './services/productsApi.js';
 
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -121,7 +121,7 @@ export function App() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isProductDialogOpen, setIsProductDialogOpen] = useState(false);
   const [isPurchaseDialogOpen, setIsPurchaseDialogOpen] = useState(false);
-  const [isReceiptScannerOpen, setIsReceiptScannerOpen] = useState(false);
+  const [isReceiptPhotoOpen, setIsReceiptPhotoOpen] = useState(false);
   const [selectedPurchaseId, setSelectedPurchaseId] = useState<string | null>(null);
   const [dateStart, setDateStart] = useState('');
   const [dateEnd, setDateEnd] = useState('');
@@ -244,14 +244,14 @@ export function App() {
     setFormError('');
   }
 
-  function openReceiptScanner() {
+  function openReceiptPhoto() {
     setFormError('');
-    setIsReceiptScannerOpen(true);
+    setIsReceiptPhotoOpen(true);
     navigate('compras');
   }
 
-  function closeReceiptScanner() {
-    setIsReceiptScannerOpen(false);
+  function closeReceiptPhoto() {
+    setIsReceiptPhotoOpen(false);
     setFormError('');
   }
 
@@ -295,7 +295,7 @@ export function App() {
         await createProduct({ ...item, purchase_id: purchaseId });
       }
 
-      closeReceiptScanner();
+      closeReceiptPhoto();
       showToast('Nota importada como compra.');
       await loadProducts();
       setSelectedPurchaseId(purchaseId);
@@ -344,7 +344,7 @@ export function App() {
           <div className="mt-5 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap md:mt-0">
             <button className={route === 'dashboard' ? primaryButtonClass : secondaryButtonClass} onClick={() => navigate('dashboard')}>Dashboard</button>
             <button className={route === 'compras' ? primaryButtonClass : secondaryButtonClass} onClick={() => navigate('compras')}>Compras</button>
-            <button className={secondaryButtonClass} onClick={openReceiptScanner}>Escanear nota</button>
+            <button className={secondaryButtonClass} onClick={openReceiptPhoto}>Fotografar nota</button>
             <button className={primaryButtonClass} onClick={openPurchaseDialog}>Nova compra</button>
           </div>
         </header>
@@ -595,10 +595,10 @@ export function App() {
         onClose={closePurchaseDialog}
         onSubmit={savePurchase}
       />
-      <ReceiptScannerDialog
-        isOpen={isReceiptScannerOpen}
+      <ReceiptPhotoDialog
+        isOpen={isReceiptPhotoOpen}
         error={formError}
-        onClose={closeReceiptScanner}
+        onClose={closeReceiptPhoto}
         onImport={importReceiptPurchase}
       />
       <div

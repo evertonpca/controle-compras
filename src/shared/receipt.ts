@@ -1,14 +1,18 @@
 import type { ProductInput } from './product.js';
 
+export interface ReceiptItem extends Omit<ProductInput, 'preco'> {
+  preco: number | null;
+}
+
 export interface ReceiptPreview {
-  source: 'nfce-qrcode';
-  qrCodeText: string;
+  source: 'photo-ocr';
   estabelecimento: string;
   data_compra: string;
-  items: ProductInput[];
+  items: ReceiptItem[];
+  total_nota: number | null;
   warnings: string[];
 }
 
 export interface ReceiptPreviewRequest {
-  qrCodeText: string;
+  text: string;
 }

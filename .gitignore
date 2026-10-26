@@ -9,3 +9,5 @@ data/*.sqlite
 npm-debug.log*
 dev-server*.log
 .neon
+public/ocr/
+.npm-cache/
