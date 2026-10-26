@@ -24,7 +24,18 @@ npm run dev
 - `npm run test:watch`: roda os testes em modo observação.
 - `npm run typecheck`: valida os tipos do frontend e do backend.
 
-## Estrutura
+## Instalar no celular (PWA)
+
+O build de produção inclui manifesto, ícones e service worker. Execute `npm run build` e `npm start`, e publique o site com HTTPS e certificado válido.
+
+- No Android, acesse pelo Chrome ou outro navegador compatível. Quando o navegador liberar a instalação, o site exibirá **Instalar aplicativo**. O menu do navegador também pode oferecer a instalação.
+- No iPhone/iPad, o aviso orienta a abrir no Safari e usar **Compartilhar → Adicionar à Tela de Início**.
+- O aviso fica oculto quando o site é aberto como aplicativo instalado e pode ser fechado durante a visita.
+- Sem internet, o aplicativo mostra uma página para tentar novamente. Consultar e salvar compras continua exigindo conexão; dados da API e imagens de notas não são armazenados pelo service worker.
+
+Para testar a instalação real no celular, use a versão de produção em um endereço HTTPS confiável. O certificado autoassinado do Vite e o acesso HTTP pelo IP da rede não atendem a esse requisito. O service worker só é registrado no build de produção para não interferir no desenvolvimento.
+
+## Estrutura do projeto
 
 ```text
 src/

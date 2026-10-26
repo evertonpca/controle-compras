@@ -2,14 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import type { Product, ProductInput } from '../shared/product.js';
 import { ProductDialog } from './components/ProductDialog.js';
 import { PurchaseDialog } from './components/PurchaseDialog.js';
-import { ReceiptPhotoDialog } from './components/ReceiptPhotoDialog.js';
+import { AppShell, NavigationIcon } from './components/AppShell.js';
 import { ExperimentalReceiptDialog } from './components/ExperimentalReceiptDialog.js';
 import { createProduct, deleteProduct, listProducts, updateProduct } from './services/productsApi.js';
 
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const dateFormatter = new Intl.DateTimeFormat('pt-BR');
 const monthFormatter = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' });
-const primaryButtonClass = 'min-h-11 cursor-pointer rounded-lg bg-[#176b45] px-4 py-3 font-bold text-white shadow-[0_10px_22px_rgba(23,107,69,.18)] transition hover:bg-[#0e5033] active:translate-y-px disabled:cursor-wait disabled:opacity-70';
 const secondaryButtonClass = 'min-h-11 cursor-pointer rounded-lg border border-[#d3ded8] bg-[#f8faf8] px-4 py-3 font-bold text-[#17231d] transition hover:border-[#b7c9be] hover:bg-white active:translate-y-px';
 const actionButtonClass = 'cursor-pointer rounded-lg bg-transparent px-2 py-1.5 font-bold text-[#176b45] transition hover:bg-[#e4f4eb] active:translate-y-px';
 const cardClass = 'rounded-lg border border-[#dfe6e1] bg-[#fffdf8] shadow-[0_10px_28px_rgba(25,50,38,.06)]';
@@ -122,7 +121,6 @@ export function App() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isProductDialogOpen, setIsProductDialogOpen] = useState(false);
   const [isPurchaseDialogOpen, setIsPurchaseDialogOpen] = useState(false);
-  const [isReceiptPhotoOpen, setIsReceiptPhotoOpen] = useState(false);
   const [isExperimentalReceiptOpen, setIsExperimentalReceiptOpen] = useState(false);
   const [selectedPurchaseId, setSelectedPurchaseId] = useState<string | null>(null);
   const [dateStart, setDateStart] = useState('');
@@ -212,6 +210,8 @@ export function App() {
     window.history.pushState(null, '', nextPath);
     setRoute(nextRoute);
     setSearch('');
+    window.scrollTo({ top: 0, behavior: 'instant' });
+    requestAnimationFrame(() => document.getElementById('main-content')?.focus({ preventScroll: true }));
   }
 
   function clearPurchaseFilters() {
@@ -243,17 +243,6 @@ export function App() {
 
   function closePurchaseDialog() {
     setIsPurchaseDialogOpen(false);
-    setFormError('');
-  }
-
-  function openReceiptPhoto() {
-    setFormError('');
-    setIsReceiptPhotoOpen(true);
-    navigate('compras');
-  }
-
-  function closeReceiptPhoto() {
-    setIsReceiptPhotoOpen(false);
     setFormError('');
   }
 
@@ -290,22 +279,6 @@ export function App() {
     }
   }
 
-  async function importReceiptPurchase(items: ProductInput[]) {
-    try {
-      const purchaseId = crypto.randomUUID();
-      for (const item of items) {
-        await createProduct({ ...item, purchase_id: purchaseId });
-      }
-
-      closeReceiptPhoto();
-      showToast('Nota importada como compra.');
-      await loadProducts();
-      setSelectedPurchaseId(purchaseId);
-    } catch (error) {
-      setFormError(error instanceof Error ? error.message : 'Nao foi possivel importar a nota fiscal.');
-    }
-  }
-
   async function removeProduct(product: Product) {
     if (!window.confirm(`Deseja realmente excluir "${product.nome}" desta compra?`)) return;
     await deleteProduct(product.id);
@@ -336,39 +309,33 @@ export function App() {
 
   return (
     <div className="min-h-screen bg-[#f4f7f5] font-sans text-[#17231d]">
-      <main className="mx-auto my-5 w-[min(1180px,calc(100%_-_24px))] sm:w-[min(1180px,calc(100%_-_32px))] md:my-[42px]">
-        <header className="mb-5 rounded-lg border border-[#dfe6e1] bg-[#fffdf8] px-4 py-5 shadow-[0_10px_30px_rgba(25,50,38,.05)] sm:px-5 md:mb-7 md:flex md:items-end md:justify-between md:gap-6">
+      <AppShell route={route} onNavigate={navigate} onNewPurchase={openPurchaseDialog} onExperimental={() => setIsExperimentalReceiptOpen(true)}>
+        <header className="page-header">
           <div>
-            <span className="text-xs font-extrabold uppercase text-[#176b45]">Historico de compras</span>
-            <h1 className="mb-1 mt-1 text-[clamp(28px,4vw,42px)] font-bold leading-tight">Minhas compras</h1>
-            <p className="m-0 text-[#68756e]">Acompanhe gastos, estabelecimentos, categorias e itens comprados.</p>
+            <span className="page-eyebrow">Seu dia a dia em ordem</span>
+            <h1>{route === 'dashboard' ? 'Um olhar nas suas compras' : 'Suas compras, organizadas'}</h1>
+            <p>{route === 'dashboard' ? 'Entenda seus gastos e acompanhe o que faz parte da sua rotina.' : 'Encontre cada compra e confira os detalhes no seu ritmo.'}</p>
           </div>
-          <div className="mt-5 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap md:mt-0">
-            <button className={route === 'dashboard' ? primaryButtonClass : secondaryButtonClass} onClick={() => navigate('dashboard')}>Dashboard</button>
-            <button className={route === 'compras' ? primaryButtonClass : secondaryButtonClass} onClick={() => navigate('compras')}>Compras</button>
-            <button className={secondaryButtonClass} onClick={openReceiptPhoto}>Fotografar nota</button>
-            <button className={secondaryButtonClass} onClick={() => setIsExperimentalReceiptOpen(true)}>Experimental · IA</button>
-            <button className={primaryButtonClass} onClick={openPurchaseDialog}>Nova compra</button>
-          </div>
+          <button className="new-purchase-button page-new-purchase" onClick={openPurchaseDialog}><NavigationIcon name="plus" />Nova compra</button>
         </header>
 
         {route === 'dashboard' ? (
           <div className="grid gap-5">
-            <section className="grid gap-4 md:grid-cols-4">
-              <div className="rounded-lg border border-[#cfded5] bg-[#173426] p-5 text-white shadow-[0_16px_38px_rgba(23,52,38,.18)] md:col-span-2">
+            <section className="summary-grid grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+              <div className="rounded-lg border border-[#cfded5] bg-[#173426] p-5 text-white shadow-[0_16px_38px_rgba(23,52,38,.18)] col-span-2">
                 <span className="text-xs font-extrabold uppercase text-[#f3c567]">{monthFormatter.format(new Date(`${currentMonth}-02T00:00:00`))}</span>
                 <p className="mt-3 text-4xl font-bold">{currency.format(monthlyTotal)}</p>
-                <p className="mt-2 text-sm text-[#c7d9ce]">Total gasto no mes atual.</p>
+                <p className="mt-2 text-sm text-[#c7d9ce]">Total gasto neste mês.</p>
               </div>
               <div className="rounded-lg border border-[#d8e0ed] bg-[#f6f9ff] p-5 shadow-[0_10px_28px_rgba(30,64,120,.07)]">
                 <span className="text-xs font-extrabold uppercase text-[#68756e]">Compras</span>
                 <p className="mt-3 text-3xl font-bold">{currentMonthPurchases.length}</p>
-                <p className="mt-2 text-sm text-[#68756e]">Visitas registradas neste mes.</p>
+                <p className="mt-2 text-sm text-[#68756e]">Compras neste mês.</p>
               </div>
               <div className="rounded-lg border border-[#eadfca] bg-[#fff8ea] p-5 shadow-[0_10px_28px_rgba(120,80,30,.07)]">
-                <span className="text-xs font-extrabold uppercase text-[#68756e]">Ticket medio</span>
-                <p className="mt-3 text-3xl font-bold">{currency.format(averageTicket)}</p>
-                <p className="mt-2 text-sm text-[#68756e]">Media por compra no historico.</p>
+                <span className="text-xs font-extrabold uppercase text-[#68756e]">Ticket médio</span>
+                <p className="mt-3 text-[clamp(1.2rem,4vw,1.875rem)] font-bold tracking-tight">{currency.format(averageTicket)}</p>
+                <p className="mt-2 text-sm text-[#68756e]">Média de todo o histórico.</p>
               </div>
             </section>
 
@@ -379,17 +346,17 @@ export function App() {
 
             <section className="grid gap-5 lg:grid-cols-3">
               <div className={`${cardClass} p-5`}>
-                <h2 className="text-lg font-bold">Maior item do mes</h2>
+                <h2 className="text-lg font-bold">Maior gasto por produto</h2>
                 <p className="mt-4 text-2xl font-bold">{topProduct?.label ?? '-'}</p>
-                <p className="mt-2 text-sm text-[#68756e]">{topProduct ? currency.format(topProduct.total) : 'Sem compras no mes.'}</p>
+                <p className="mt-2 text-sm text-[#68756e]">{topProduct ? currency.format(topProduct.total) : 'Sem compras no mês.'}</p>
               </div>
               <div className="rounded-lg border border-[#d8e0ed] bg-[#f6f9ff] p-5 shadow-[0_10px_28px_rgba(30,64,120,.07)]">
                 <h2 className="text-lg font-bold">Categorias diferentes</h2>
                 <p className="mt-4 text-3xl font-bold">{categoryBreakdown.length}</p>
-                <p className="mt-2 text-sm text-[#68756e]">Variedade dos seus gastos no mes.</p>
+                <p className="mt-2 text-sm text-[#68756e]">Variedade dos seus gastos no mês.</p>
               </div>
               <div className="rounded-lg border border-[#eadfca] bg-[#fff8ea] p-5 shadow-[0_10px_28px_rgba(120,80,30,.07)]">
-                <h2 className="text-lg font-bold">Ultima compra</h2>
+                <h2 className="text-lg font-bold">Última compra</h2>
                 <p className="mt-4 text-2xl font-bold">{purchases[0]?.estabelecimento ?? '-'}</p>
                 <p className="mt-2 text-sm text-[#68756e]">{purchases[0] ? `${formatPurchaseDate(purchases[0].data_compra)} - ${currency.format(purchases[0].total)}` : 'Nenhuma compra registrada.'}</p>
               </div>
@@ -399,7 +366,7 @@ export function App() {
           <div className="grid gap-4">
             <section className="rounded-lg border border-[#dfe6e1] bg-[#fffdf8] px-4 py-4 shadow-[0_10px_28px_rgba(25,50,38,.06)] sm:px-5">
               <div className="grid gap-4">
-                <div className="grid gap-4 lg:grid-cols-[minmax(180px,1fr)_minmax(160px,.7fr)_minmax(160px,.7fr)]">
+                <div className="grid gap-4">
                   <label className="grid gap-2 text-[13px] font-bold">
                     Buscar
                     <input
@@ -410,74 +377,79 @@ export function App() {
                       onChange={(event) => setSearch(event.target.value)}
                     />
                   </label>
-                  <label className="grid gap-2 text-[13px] font-bold">
-                    Estabelecimento
-                    <select className={selectClass} value={merchantFilter} onChange={(event) => setMerchantFilter(event.target.value)}>
-                      <option value="">Todos</option>
-                      {merchantOptions.map((merchant) => (
-                        <option key={merchant} value={merchant}>{merchant}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="grid gap-2 text-[13px] font-bold">
-                    Categoria
-                    <select className={selectClass} value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
-                      <option value="">Todas</option>
-                      {categoryOptions.map((category) => (
-                        <option key={category} value={category}>{category}</option>
-                      ))}
-                    </select>
-                  </label>
                 </div>
+                <details className="purchase-filters">
+                  <summary>Filtrar compras<span>{[dateStart, dateEnd, merchantFilter, categoryFilter, minTotal, maxTotal].filter(Boolean).length || 'Todos os registros'}</span></summary>
+                  <div className="grid gap-4 pt-4 sm:grid-cols-2">
+                    <label className="grid gap-2 text-[13px] font-bold">
+                      Estabelecimento
+                      <select className={selectClass} value={merchantFilter} onChange={(event) => setMerchantFilter(event.target.value)}>
+                        <option value="">Todos</option>
+                        {merchantOptions.map((merchant) => (
+                          <option key={merchant} value={merchant}>{merchant}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="grid gap-2 text-[13px] font-bold">
+                      Categoria
+                      <select className={selectClass} value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+                        <option value="">Todas</option>
+                        {categoryOptions.map((category) => (
+                          <option key={category} value={category}>{category}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
 
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[repeat(4,minmax(120px,1fr))_auto] lg:items-end">
-                  <label className="grid gap-2 text-[13px] font-bold">
-                    Data inicial
-                    <input
-                      className={dateInputClass}
-                      type="date"
-                      value={dateStart}
-                      onChange={(event) => setDateStart(event.target.value)}
-                    />
-                  </label>
-                  <label className="grid gap-2 text-[13px] font-bold">
-                    Data final
-                    <input
-                      className={dateInputClass}
-                      type="date"
-                      value={dateEnd}
-                      onChange={(event) => setDateEnd(event.target.value)}
-                    />
-                  </label>
-                  <label className="grid gap-2 text-[13px] font-bold">
-                    Valor minimo
-                    <input
-                      className={inputClass}
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      placeholder="R$ 0,00"
-                      value={minTotal}
-                      onChange={(event) => setMinTotal(event.target.value)}
-                    />
-                  </label>
-                  <label className="grid gap-2 text-[13px] font-bold">
-                    Valor maximo
-                    <input
-                      className={inputClass}
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      placeholder="Sem limite"
-                      value={maxTotal}
-                      onChange={(event) => setMaxTotal(event.target.value)}
-                    />
-                  </label>
-                  <button className={`${secondaryButtonClass} sm:col-span-2 lg:col-span-1`} type="button" onClick={clearPurchaseFilters}>
-                    Limpar filtros
-                  </button>
-                </div>
+                  <div className="grid gap-4 pt-4 sm:grid-cols-2 2xl:grid-cols-[repeat(4,minmax(120px,1fr))_auto] 2xl:items-end">
+                    <label className="grid gap-2 text-[13px] font-bold">
+                      Data inicial
+                      <input
+                        className={dateInputClass}
+                        type="date"
+                        value={dateStart}
+                        onChange={(event) => setDateStart(event.target.value)}
+                      />
+                    </label>
+                    <label className="grid gap-2 text-[13px] font-bold">
+                      Data final
+                      <input
+                        className={dateInputClass}
+                        type="date"
+                        value={dateEnd}
+                        onChange={(event) => setDateEnd(event.target.value)}
+                      />
+                    </label>
+                    <label className="grid gap-2 text-[13px] font-bold">
+                      Valor mínimo
+                      <input
+                        className={inputClass}
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        placeholder="R$ 0,00"
+                        value={minTotal}
+                        onChange={(event) => setMinTotal(event.target.value)}
+                      />
+                    </label>
+                    <label className="grid gap-2 text-[13px] font-bold">
+                      Valor máximo
+                      <input
+                        className={inputClass}
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        placeholder="Sem limite"
+                        value={maxTotal}
+                        onChange={(event) => setMaxTotal(event.target.value)}
+                      />
+                    </label>
+                    <button className={`${secondaryButtonClass} sm:col-span-2 2xl:col-span-1`} type="button" onClick={clearPurchaseFilters}>
+                      Limpar filtros
+                    </button>
+                  </div>
 
+                </details>
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="rounded-lg bg-[#edf2ef] px-3 py-2 text-sm text-[#68756e]"><strong className="text-[#17231d]">{filteredPurchases.length}</strong> compras encontradas</div>
                   <div className="rounded-lg bg-[#fff8ea] px-3 py-2 text-sm text-[#68756e]"><strong className="text-[#17231d]">{currency.format(filteredPurchases.reduce((total, purchase) => total + purchase.total, 0))}</strong> no filtro</div>
@@ -486,7 +458,7 @@ export function App() {
             </section>
 
             {filteredPurchases.length ? (
-              <section className="grid gap-4 lg:grid-cols-[minmax(0,420px)_1fr] lg:gap-5">
+              <section className="grid gap-4 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)] lg:gap-5">
                 <div className="grid content-start gap-3">
                   {filteredPurchases.map((purchase) => (
                     <div key={purchase.id} className="grid gap-3">
@@ -558,7 +530,7 @@ export function App() {
 
                       <div className="grid gap-3">
                         {selectedPurchase.items.map((item) => (
-                          <article key={item.id} className="grid gap-3 rounded-lg border border-[#dbe3de] bg-white p-4 shadow-[0_6px_16px_rgba(25,50,38,.04)] md:grid-cols-[1fr_110px_140px_156px] md:items-center">
+                          <article key={item.id} className="grid gap-3 rounded-lg border border-[#dbe3de] bg-white p-4 shadow-[0_6px_16px_rgba(25,50,38,.04)] 2xl:grid-cols-[minmax(0,1fr)_80px_110px_140px] 2xl:items-center">
                             <div className="min-w-0">
                               <strong className="block overflow-hidden text-ellipsis whitespace-nowrap">{item.nome}</strong>
                               <span className="mt-1 block text-sm text-[#68756e]">{item.categoria || 'Sem categoria'}</span>
@@ -583,7 +555,7 @@ export function App() {
             )}
           </div>
         )}
-      </main>
+      </AppShell>
 
       <ProductDialog
         product={editingProduct}
@@ -597,12 +569,6 @@ export function App() {
         error={formError}
         onClose={closePurchaseDialog}
         onSubmit={savePurchase}
-      />
-      <ReceiptPhotoDialog
-        isOpen={isReceiptPhotoOpen}
-        error={formError}
-        onClose={closeReceiptPhoto}
-        onImport={importReceiptPurchase}
       />
       <ExperimentalReceiptDialog
         isOpen={isExperimentalReceiptOpen}
@@ -618,7 +584,7 @@ export function App() {
         }}
       />
       <div
-        className={`pointer-events-none fixed bottom-5 right-5 rounded-lg bg-[#17231d] px-4 py-3 text-white transition duration-200 ${toast ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'}`}
+        className={`app-toast pointer-events-none fixed rounded-lg bg-[#17231d] px-4 py-3 text-white transition duration-200 ${toast ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'}`}
         role="status"
       >
         {toast}
