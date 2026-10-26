@@ -13,10 +13,13 @@
     "build:server": "tsc -p tsconfig.server.json",
     "start": "node dist/server/server/index.js",
     "test": "vitest run",
+    "test:neon": "node scripts/test-neon.mjs",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit"
   },
   "dependencies": {
+    "@neon/config": "^1.9.4",
+    "@neon/env": "^1.6.5",
     "@zxing/browser": "^0.2.1",
     "@zxing/library": "^0.23.0",
     "better-sqlite3": "^12.2.0",

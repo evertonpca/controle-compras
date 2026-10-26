@@ -1,6 +1,8 @@
 import { createApp } from './app.js';
 import { createStorage } from './storage.js';
+import { loadEnvironment } from './environment.js';
 
+loadEnvironment();
 const port = Number(process.env.PORT ?? 3000);
 const storage = await createStorage();
 const app = createApp({ productRepository: storage.repository });

@@ -98,4 +98,18 @@ $env:DATABASE_URL = 'COLE_AQUI_A_URL_DO_NEON'
 npm run dev
 ```
 
-O arquivo `.env.example` é apenas uma referência; o backend lê as variáveis do processo e não carrega `.env` automaticamente. Os testes executam o mesmo fluxo de produtos em SQLite e em PostgreSQL emulado (`pg-mem`); uma conexão real com Neon deve ser conferida após o deploy.
+O backend carrega `.env.local` e `.env` automaticamente. Variáveis já definidas no processo (por exemplo, pelo Render) têm prioridade, seguidas por `.env.local` e `.env`. `DATABASE_URL` é usada pelo pool da aplicação; quando disponível, `DATABASE_URL_UNPOOLED` é usada para inicializar o schema pela conexão direta. Credenciais ficam apenas no backend.
+
+### Configuração pelo Neon CLI
+
+```powershell
+neon login
+neon init -y --org-id org-bold-hall-84446658 --project-id ancient-base-07975314 --branch production --services postgres
+neon deploy
+npm run build
+npm run test:neon
+```
+
+O CLI mantém o vínculo local em `.neon` (ignorado pelo Git) e as credenciais em `.env.local` ou no `.env` existente. `neon.ts` declara apenas PostgreSQL; Auth permanece desabilitado. O servidor Express continua hospedado no Render, que precisa receber `DATABASE_URL` e, se disponível, `DATABASE_URL_UNPOOLED` nas variáveis de ambiente.
+
+`npm test` executa os testes locais, incluindo PostgreSQL emulado (`pg-mem`). `npm run test:neon` exige o build e uma conexão real: inicia o backend compilado, verifica a interface, cria/atualiza uma compra, confirma a gravação diretamente no PostgreSQL, reinicia o backend e verifica persistência, depois remove apenas o registro criado pelo teste. Esse comando usa o banco apontado pelas variáveis locais.

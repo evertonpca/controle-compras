@@ -25,7 +25,15 @@ export async function createStorage(env: NodeJS.ProcessEnv = process.env): Promi
   const pool = new Pool({ connectionString, max: 5, connectionTimeoutMillis: 15_000 });
   pool.on('error', () => console.error('Conexão PostgreSQL interrompida.'));
   try {
-    await ensurePostgresProductSchema(pool);
+    const directConnectionString = env.DATABASE_URL_UNPOOLED?.trim();
+    const schemaPool = directConnectionString
+      ? new Pool({ connectionString: directConnectionString, max: 1, connectionTimeoutMillis: 15_000 })
+      : pool;
+    try {
+      await ensurePostgresProductSchema(schemaPool);
+    } finally {
+      if (schemaPool !== pool) await schemaPool.end();
+    }
     return { repository: new PostgresProductRepository(pool), close: () => pool.end() };
   } catch {
     await pool.end();
